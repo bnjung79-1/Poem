@@ -343,6 +343,14 @@
       <div class="section-sub">내가 쓴 감상</div>
       <div id="notesList"></div>
     </section>
+
+    <!-- 내 서재 -->
+    <section class="view" id="viewMine">
+      <div class="section-head">My Shelf</div>
+      <div class="section-sub">내가 직접 기록해둔 시들</div>
+      <button class="btn" style="margin-bottom:20px" onclick="openAddPoem()">＋ 시 기록하기</button>
+      <div id="mineList"></div>
+    </section>
   </main>
 </div>
 
@@ -363,7 +371,28 @@
     <svg viewBox="0 0 24 24"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h8M8 18h5"/></svg>
     <span>감상</span>
   </button>
+  <button class="tab" data-view="viewMine">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    <span>내 시</span>
+  </button>
 </nav>
+
+<!-- 시 추가 모달 -->
+<div class="modal" id="addModal">
+  <div class="modal-card">
+    <div class="section-head" style="margin-top:0;font-size:22px">시 기록하기</div>
+    <div class="section-sub" style="margin-bottom:16px">평소 좋아하시는 시를 개인 서재에 담아두세요.</div>
+    <input id="addTitle" placeholder="제목" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
+    <input id="addPoet" placeholder="시인" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
+    <input id="addCountry" placeholder="국가/분류 (예: 한국)" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
+    <textarea id="addBody" placeholder="시 본문" style="width:100%;min-height:180px;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;line-height:1.8;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);resize:vertical;box-sizing:border-box"></textarea>
+    <textarea id="addNote" placeholder="메모 (선택)" style="width:100%;min-height:60px;padding:12px;margin-bottom:16px;font-family:'Gowun Batang';font-size:14px;line-height:1.7;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);resize:vertical;box-sizing:border-box"></textarea>
+    <div class="actions" style="justify-content:flex-end;margin:0">
+      <button class="btn" onclick="closeAddModal()">취소</button>
+      <button class="btn" style="background:var(--ink);color:var(--paper)" onclick="saveAddPoem()">저장</button>
+    </div>
+  </div>
+</div>
 
 <!-- 공유 모달 -->
 <div class="modal" id="shareModal">
@@ -551,6 +580,86 @@ function isFav(dateKey) { return getFavs().includes(dateKey); }
 function getMemo(dateKey) { return storage.get('memo:' + dateKey) || ''; }
 function setMemo(dateKey, text) { storage.set('memo:' + dateKey, text); }
 
+// ============ 사용자가 직접 추가한 시 ============
+function getUserPoems() {
+  const raw = storage.get('user_poems');
+  return raw ? JSON.parse(raw) : [];
+}
+function saveUserPoem(poem) {
+  const list = getUserPoems();
+  list.push({ ...poem, _user: true, _id: Date.now() });
+  storage.set('user_poems', JSON.stringify(list));
+}
+function deleteUserPoem(id) {
+  const list = getUserPoems().filter(p => p._id !== id);
+  storage.set('user_poems', JSON.stringify(list));
+}
+
+// ============ 내 시 서재 ============
+function openAddPoem() {
+  document.getElementById('addTitle').value = '';
+  document.getElementById('addPoet').value = '';
+  document.getElementById('addCountry').value = '한국';
+  document.getElementById('addBody').value = '';
+  document.getElementById('addNote').value = '';
+  document.getElementById('addModal').classList.add('open');
+}
+function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+function saveAddPoem() {
+  const title = document.getElementById('addTitle').value.trim();
+  const poet = document.getElementById('addPoet').value.trim();
+  const country = document.getElementById('addCountry').value.trim() || '한국';
+  const body = document.getElementById('addBody').value.trim();
+  const note = document.getElementById('addNote').value.trim();
+  if (!title || !body) {
+    toast('제목과 본문은 필수예요');
+    return;
+  }
+  saveUserPoem({
+    title, poet: poet || '미상', country,
+    year: '', original: '', translation: body,
+    note, tags: ['내시']
+  });
+  closeAddModal();
+  renderMine();
+  toast('서재에 담았어요');
+}
+
+function renderMine() {
+  const list = document.getElementById('mineList');
+  const mine = getUserPoems().slice().reverse();
+  if (!mine.length) {
+    list.innerHTML = '<div class="empty">아직 서재가 비어 있어요<br><span style="font-size:13px">＋ 버튼으로 시를 기록해보세요</span></div>';
+    return;
+  }
+  list.innerHTML = mine.map(p => `
+    <div class="list-item" style="position:relative" onclick="openUserPoem(${p._id})">
+      <div class="li-title">${escapeHtml(p.title)}</div>
+      <div class="li-poet">${escapeHtml(p.poet)}<span class="li-country">${escapeHtml(p.country||'')}</span></div>
+      <div style="font-family:'Gowun Batang';font-size:13px;line-height:1.6;margin-top:8px;opacity:0.7;max-height:3em;overflow:hidden">${escapeHtml((p.translation||'').slice(0,80))}${p.translation.length>80?'…':''}</div>
+      <button onclick="event.stopPropagation(); confirmDeleteUserPoem(${p._id})" style="position:absolute;right:0;top:20px;background:none;border:none;color:inherit;opacity:0.4;font-size:18px;cursor:pointer">×</button>
+    </div>
+  `).join('');
+}
+
+function openUserPoem(id) {
+  const p = getUserPoems().find(x => x._id === id);
+  if (!p) return;
+  currentPoem = p;
+  currentDate = 'user-' + id;
+  switchTab('viewToday');
+  renderPoemCard(p, currentDate);
+}
+
+function confirmDeleteUserPoem(id) {
+  if (confirm('이 시를 서재에서 삭제할까요?')) {
+    deleteUserPoem(id);
+    renderMine();
+    toast('삭제했어요');
+  }
+}
+
 // ============ 시 선택 (로컬 컬렉션에서) ============
 function pickPoemByDate(dateKey, seed = 0) {
   // 날짜 문자열을 해시해서 deterministic하게 선택
@@ -558,7 +667,7 @@ function pickPoemByDate(dateKey, seed = 0) {
   for (let i = 0; i < dateKey.length; i++) {
     hash = ((hash * 31) + dateKey.charCodeAt(i)) | 0;
   }
-  const pool = window.POEMS || [];
+  const pool = [...(window.POEMS || []), ...getUserPoems()];
   if (!pool.length) throw new Error('시 컬렉션이 비어 있어요');
   const idx = Math.abs(hash) % pool.length;
   return { ...pool[idx] };
@@ -616,6 +725,7 @@ function renderPoemCard(poem, dateKey) {
       <button class="btn ${favorited ? 'active' : ''}" id="favBtn" onclick="onFav()">
         ${favorited ? '♥ 즐겨찾기됨' : '♡ 즐겨찾기'}
       </button>
+      <button class="btn" id="speakBtn" onclick="speakPoem()">♪ 읽어주기</button>
       <button class="btn" onclick="openShare()">공유</button>
       <button class="btn" onclick="newPoem()">다른 시</button>
     </div>
@@ -726,6 +836,73 @@ function renderNotes() {
   `).join('');
 }
 
+// ============ 시 낭송 (TTS) ============
+let voicesReady = false;
+function loadVoices() {
+  const v = speechSynthesis.getVoices();
+  if (v.length) voicesReady = true;
+}
+if ('speechSynthesis' in window) {
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function pickFemaleKoreanVoice() {
+  const voices = speechSynthesis.getVoices();
+  const ko = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('ko'));
+  // 한국어 여성 목소리 키워드 우선
+  const femaleMatch = ko.find(v => /female|여자|yuna|sora|hyejin|seoyeon|kyuri|jimin|google.*한국|ko-kr-x-kob|ko-kr-x-koc/i.test(v.name));
+  if (femaleMatch) return femaleMatch;
+  // "Google 한국의" 계열이 대체로 여성
+  const google = ko.find(v => /google/i.test(v.name));
+  if (google) return google;
+  return ko[0] || null;
+}
+
+function speakPoem() {
+  if (!('speechSynthesis' in window)) {
+    toast('이 기기는 음성 낭송을 지원하지 않아요');
+    return;
+  }
+  const btn = document.getElementById('speakBtn');
+  // 이미 재생 중이면 중단
+  if (speechSynthesis.speaking) {
+    speechSynthesis.cancel();
+    if (btn) btn.textContent = '♪ 읽어주기';
+    return;
+  }
+  if (!currentPoem) return;
+
+  // 제목, 시인, 본문을 자연스럽게 이어서 낭송
+  const parts = [];
+  if (currentPoem.title) parts.push(currentPoem.title + '.');
+  if (currentPoem.poet) parts.push(currentPoem.poet + '.');
+  if (currentPoem.translation) parts.push(currentPoem.translation);
+  const text = parts.join('\n\n');
+
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ko-KR';
+  u.rate = 0.88;    // 천천히
+  u.pitch = 1.15;   // 살짝 높게 (여성스러운 톤)
+  u.volume = 1.0;
+  const v = pickFemaleKoreanVoice();
+  if (v) u.voice = v;
+
+  u.onend = () => { if (btn) btn.textContent = '♪ 읽어주기'; };
+  u.onerror = () => {
+    if (btn) btn.textContent = '♪ 읽어주기';
+    toast('낭송을 시작할 수 없어요');
+  };
+
+  speechSynthesis.speak(u);
+  if (btn) btn.textContent = '■ 멈추기';
+}
+
+// 탭 전환이나 페이지 이탈 시 낭송 중단
+window.addEventListener('pagehide', () => {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+});
+
 // ============ 공유 ============
 function openShare() {
   if (!currentPoem) return;
@@ -792,12 +969,14 @@ function downloadShareImage() {
 
 // ============ 탭 전환 ============
 function switchTab(viewId) {
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(viewId).classList.add('active');
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === viewId));
   if (viewId === 'viewFavs') renderFavs();
   if (viewId === 'viewArchive') renderArchive();
   if (viewId === 'viewNotes') renderNotes();
+  if (viewId === 'viewMine') renderMine();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 document.querySelectorAll('.tab').forEach(t => {
