@@ -348,7 +348,10 @@
     <section class="view" id="viewMine">
       <div class="section-head">My Shelf</div>
       <div class="section-sub">내가 직접 기록해둔 시들</div>
-      <button class="btn" style="margin-bottom:20px" onclick="openAddPoem()">＋ 시 기록하기</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        <button class="btn" onclick="openAddPoem()">＋ 시 기록하기</button>
+        <button class="btn" onclick="exportPoemsJs()">↓ poems.js 내보내기</button>
+      </div>
       <div id="mineList"></div>
     </section>
   </main>
@@ -661,6 +664,45 @@ function confirmDeleteUserPoem(id) {
     renderMine();
     toast('삭제했어요');
   }
+}
+
+// 기본 시 + 내 시를 합쳐 poems.js 형식으로 내보내기
+function exportPoemsJs() {
+  const base = window.POEMS || [];
+  const mine = getUserPoems().map(p => {
+    const { _user, _id, ...rest } = p;
+    return rest;
+  });
+  if (!mine.length) {
+    toast('내보낼 내 시가 없어요');
+    return;
+  }
+  const all = [...base, ...mine];
+
+  const lines = ['// 오늘의 시 · poems.js (자동 생성)', '', 'window.POEMS = ['];
+  all.forEach((p, i) => {
+    lines.push('  {');
+    lines.push(`    title: ${JSON.stringify(p.title || '')},`);
+    lines.push(`    poet: ${JSON.stringify(p.poet || '')}, country: ${JSON.stringify(p.country || '')}, year: ${JSON.stringify(p.year || '')},`);
+    lines.push(`    original: ${JSON.stringify(p.original || '')},`);
+    lines.push(`    translation: ${JSON.stringify(p.translation || '')},`);
+    lines.push(`    note: ${JSON.stringify(p.note || '')},`);
+    lines.push(`    tags: ${JSON.stringify(p.tags || [])}`);
+    lines.push('  }' + (i < all.length - 1 ? ',' : ''));
+  });
+  lines.push('];', '');
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/javascript;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'poems.js';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  toast(`poems.js 다운로드 (총 ${all.length}편, 내 시 ${mine.length}편 포함)`);
 }
 
 // ============ 시 선택 (로컬 컬렉션에서) ============
