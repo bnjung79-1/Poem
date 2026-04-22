@@ -382,6 +382,9 @@
   <div class="modal-card">
     <div class="section-head" style="margin-top:0;font-size:22px">시 기록하기</div>
     <div class="section-sub" style="margin-bottom:16px">평소 좋아하시는 시를 개인 서재에 담아두세요.</div>
+    <button class="btn" style="width:100%;margin-bottom:14px;padding:14px" onclick="document.getElementById('ocrInput').click()">📷 사진에서 글자 읽어오기</button>
+    <input type="file" id="ocrInput" accept="image/*" capture="environment" style="display:none" onchange="handleOcrImage(event)">
+    <div id="ocrProgress" style="display:none;text-align:center;padding:10px;font-family:'Cormorant Garamond';font-style:italic;font-size:14px;opacity:0.7;margin-bottom:10px"></div>
     <input id="addTitle" placeholder="제목" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
     <input id="addPoet" placeholder="시인" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
     <input id="addCountry" placeholder="국가/분류 (예: 한국)" style="width:100%;padding:12px;margin-bottom:10px;font-family:'Nanum Myeongjo';font-size:15px;border:1px solid rgba(0,0,0,0.2);border-radius:2px;background:rgba(255,255,255,0.5);color:var(--ink);box-sizing:border-box">
@@ -834,6 +837,73 @@ function renderNotes() {
       <div style="font-family:'Gowun Batang';font-size:14px;line-height:1.7;margin-top:10px;opacity:0.8;">${escapeHtml(m.length>140 ? m.slice(0,140)+'…' : m)}</div>
     </div>
   `).join('');
+}
+
+// ============ 사진 OCR (Tesseract.js) ============
+let tesseractPromise = null;
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractPromise) return tesseractPromise;
+  tesseractPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = () => resolve(window.Tesseract);
+    s.onerror = () => { tesseractPromise = null; reject(new Error('load failed')); };
+    document.head.appendChild(s);
+  });
+  return tesseractPromise;
+}
+
+async function handleOcrImage(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  const prog = document.getElementById('ocrProgress');
+  prog.style.display = 'block';
+  prog.textContent = '문자 인식 준비 중…';
+
+  try {
+    const Tesseract = await loadTesseract();
+    prog.textContent = '이미지에서 글자를 읽는 중… (첫 사용은 오래 걸릴 수 있어요)';
+
+    const result = await Tesseract.recognize(file, 'kor', {
+      logger: m => {
+        if (m.status === 'recognizing text' && m.progress) {
+          prog.textContent = `글자를 읽는 중… ${Math.round(m.progress * 100)}%`;
+        } else if (m.status === 'loading language traineddata') {
+          prog.textContent = '한국어 데이터를 처음 받아오는 중… (1분 정도)';
+        }
+      }
+    });
+
+    const text = (result.data.text || '').trim();
+    if (!text) {
+      prog.textContent = '글자를 찾지 못했어요. 더 밝은 사진으로 시도해보세요.';
+      setTimeout(() => prog.style.display = 'none', 3000);
+      return;
+    }
+
+    // 줄 단위 정리: 빈 줄 다중 제거, 양쪽 공백 정리
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    const titleEl = document.getElementById('addTitle');
+    const bodyEl = document.getElementById('addBody');
+
+    // 휴리스틱: 첫 줄이 짧으면(<=20자) 제목으로 판단
+    if (!titleEl.value && lines.length >= 2 && lines[0].length <= 20) {
+      titleEl.value = lines[0];
+      bodyEl.value = (bodyEl.value ? bodyEl.value + '\n\n' : '') + lines.slice(1).join('\n');
+    } else {
+      bodyEl.value = (bodyEl.value ? bodyEl.value + '\n' : '') + lines.join('\n');
+    }
+
+    prog.textContent = '✓ 추출 완료. 내용을 확인하고 고쳐주세요.';
+    setTimeout(() => prog.style.display = 'none', 2500);
+  } catch (err) {
+    console.error(err);
+    prog.textContent = '문자 추출에 실패했어요';
+    setTimeout(() => prog.style.display = 'none', 3000);
+  }
 }
 
 // ============ 시 낭송 (TTS) ============
